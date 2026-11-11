@@ -1,0 +1,456 @@
+<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
+<title>Orbit Sandbox</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: the simulation stage fills the left, a narrow instrument panel sits right; they stack on phones.
+   Single dark look on purpose: it is a night-sky instrument. */
+:root {
+  --bg: #070b14;
+  --panel: #0d1424;
+  --line: #1f2a44;
+  --fg: #e6ebf5;
+  --muted: #8693b0;
+  --accent: #f5b04c;
+  --probe: #8fe3ff;
+  --bad: #ff7a7a;
+  --body-a: #f5b04c;
+  --body-b: #4cc9b0;
+  --body-c: #ef6f6c;
+  --font-display: 'Space Grotesk', system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, 'SFMono-Regular', Menlo, monospace;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body {
+  background: var(--bg);
+  color: var(--fg);
+  font: 14px/1.45 system-ui, -apple-system, 'Segoe UI', sans-serif;
+  padding-block: 16px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
+.app { display: grid; gap: 16px; }
+.stage {
+  position: relative;
+  height: clamp(300px, 72vw, 520px);
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  overflow: hidden;
+  background: var(--bg);
+}
+#c { display: block; width: 100%; height: 100%; }
+.hud {
+  position: absolute; top: 12px; left: 12px; right: 12px;
+  display: flex; justify-content: space-between; align-items: center; gap: 8px;
+  pointer-events: none;
+}
+.pill {
+  font: 500 12px/1 var(--font-mono);
+  letter-spacing: .06em; text-transform: uppercase;
+  padding: 7px 10px; border-radius: 3px;
+  border: 1px solid var(--line); background: rgba(13, 20, 36, .85); color: var(--muted);
+}
+.pill[data-s="flying"] { color: var(--probe); border-color: var(--probe); }
+.pill[data-s="crashed"] { color: var(--bad); border-color: var(--bad); }
+.pill[data-s="escaped"] { color: var(--accent); border-color: var(--accent); }
+.mono { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+.clock { font-size: 12px; color: var(--muted); }
+.foot {
+  position: absolute; left: 12px; bottom: 10px; right: 12px;
+  font-size: 11px; color: var(--muted); letter-spacing: .03em; pointer-events: none;
+}
+.panel {
+  min-width: 0;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 18px;
+  display: flex; flex-direction: column; gap: 18px;
+}
+h1 { font: 700 22px/1.1 var(--font-display); margin: 0 0 6px; letter-spacing: -.01em; }
+.lede { margin: 0; color: var(--muted); font-size: 13px; }
+h2 {
+  font: 500 11px/1 var(--font-mono); letter-spacing: .12em; text-transform: uppercase;
+  color: var(--muted); margin: 0 0 10px;
+}
+.group { display: flex; flex-direction: column; gap: 12px; }
+.ctl { display: grid; gap: 6px; }
+.ctl-row { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+.ctl label { display: flex; align-items: center; gap: 8px; font-size: 13px; }
+.dot { width: 10px; height: 10px; border-radius: 50%; background: var(--c, var(--fg)); flex: none; }
+.val { font: 500 13px/1 var(--font-mono); font-variant-numeric: tabular-nums; }
+.sub { font: 400 11px/1 var(--font-mono); color: var(--muted); }
+input[type="range"] { width: 100%; margin: 0; accent-color: var(--c, var(--accent)); height: 22px; }
+input:focus-visible, button:focus-visible { outline: 2px solid var(--probe); outline-offset: 2px; }
+.check { display: flex; align-items: center; gap: 8px; font-size: 13px; }
+.check input { accent-color: var(--accent); width: 16px; height: 16px; margin: 0; }
+.buttons { display: flex; gap: 10px; flex-wrap: wrap; }
+button {
+  font: 700 14px/1 var(--font-display);
+  padding: 12px 18px; border-radius: 4px; cursor: pointer; min-height: 44px;
+  border: 1px solid var(--line); background: transparent; color: var(--fg);
+}
+button.primary { background: var(--accent); border-color: var(--accent); color: #1a1205; flex: 1 1 140px; }
+button:hover { border-color: var(--muted); }
+button.primary:hover { filter: brightness(1.08); border-color: var(--accent); }
+.readouts { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.readouts div { border-top: 1px solid var(--line); padding-top: 8px; min-width: 0; }
+.readouts .k { display: block; font: 400 10px/1 var(--font-mono); letter-spacing: .1em; text-transform: uppercase; color: var(--muted); margin-bottom: 6px; }
+.readouts .v { font: 500 15px/1 var(--font-mono); font-variant-numeric: tabular-nums; }
+.note { margin: 0; font-size: 12px; color: var(--muted); }
+
+@media (min-width: 820px) {
+  html, body { height: 100%; }
+  .app { grid-template-columns: minmax(0, 1fr) 330px; height: 100%; }
+  .stage { height: 100%; }
+  .panel { overflow-y: auto; }
+}
+</style>
+
+<main class="app">
+  <section class="stage" id="stage" aria-label="Orbit simulation">
+    <canvas id="c"></canvas>
+    <div class="hud">
+      <span class="pill" id="status" data-s="ready">Ready to launch</span>
+      <span class="clock mono" id="clock">t = 0.0</span>
+    </div>
+    <div class="foot mono">G = 1 &middot; body mass = 4 &times; radius&sup3; &middot; arbitrary units</div>
+  </section>
+
+  <aside class="panel">
+    <header>
+      <h1>Orbit Sandbox</h1>
+      <p class="lede">Launch the probe from the lower left. Three fixed bodies pull on it and bend its path.</p>
+    </header>
+
+    <div>
+      <h2>Probe</h2>
+      <div class="group">
+        <div class="ctl">
+          <div class="ctl-row"><label for="speed">Launch speed</label><span class="val" id="speedVal">1.75</span></div>
+          <input type="range" id="speed" min="0.5" max="6" step="0.05" value="1.75">
+        </div>
+        <div class="ctl">
+          <div class="ctl-row"><label for="angle">Launch angle</label><span class="val" id="angleVal">-10&deg;</span></div>
+          <input type="range" id="angle" min="-90" max="90" step="1" value="-10">
+          <span class="sub">0&deg; aims right, negative aims up</span>
+        </div>
+      </div>
+    </div>
+
+    <div>
+      <h2>Fixed bodies</h2>
+      <div class="group">
+        <div class="ctl" style="--c: var(--body-a)">
+          <div class="ctl-row"><label for="rA"><span class="dot"></span>Body A radius</label><span class="val" id="rAVal">3.0</span></div>
+          <input type="range" id="rA" min="0.8" max="6" step="0.1" value="3">
+          <span class="sub" id="mA">mass 108</span>
+        </div>
+        <div class="ctl" style="--c: var(--body-b)">
+          <div class="ctl-row"><label for="rB"><span class="dot"></span>Body B radius</label><span class="val" id="rBVal">2.2</span></div>
+          <input type="range" id="rB" min="0.8" max="6" step="0.1" value="2.2">
+          <span class="sub" id="mB">mass 43</span>
+        </div>
+        <div class="ctl" style="--c: var(--body-c)">
+          <div class="ctl-row"><label for="rC"><span class="dot"></span>Body C radius</label><span class="val" id="rCVal">1.6</span></div>
+          <input type="range" id="rC" min="0.8" max="6" step="0.1" value="1.6">
+          <span class="sub" id="mC">mass 16</span>
+        </div>
+      </div>
+    </div>
+
+    <div>
+      <h2>Simulation</h2>
+      <div class="group">
+        <div class="ctl">
+          <div class="ctl-row"><label for="rate">Time rate</label><span class="val" id="rateVal">3.0&times;</span></div>
+          <input type="range" id="rate" min="0.5" max="10" step="0.5" value="3">
+        </div>
+        <label class="check"><input type="checkbox" id="preview" checked>Show predicted path</label>
+      </div>
+    </div>
+
+    <div class="buttons">
+      <button class="primary" id="launch" type="button">Launch</button>
+      <button id="reset" type="button">Reset</button>
+    </div>
+
+    <div class="readouts">
+      <div><span class="k">Speed</span><span class="v" id="rSpeed">0.00</span></div>
+      <div><span class="k">Nearest</span><span class="v" id="rNear">&ndash;</span></div>
+      <div><span class="k">Elapsed</span><span class="v" id="rTime">0.0</span></div>
+    </div>
+    <p class="note">Body sizes change live while the probe is flying. Speed and angle apply on the next launch. A path that enters a body ends there.</p>
+  </aside>
+</main>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+(function () {
+  var G = 1, K = 4, SOFT = 0.5, ESCAPE = 120;
+  var LAUNCH = { x: -48, z: 26 };
+  var bodies = [
+    { name: 'A', x: -14, z: 0,  r: 3.0, color: 0xf5b04c },
+    { name: 'B', x: 20,  z: -9, r: 2.2, color: 0x4cc9b0 },
+    { name: 'C', x: 8,   z: 21, r: 1.6, color: 0xef6f6c }
+  ];
+  function mass(b) { return G * K * b.r * b.r * b.r; }
+
+  // ---------- physics ----------
+  var tmp = [0, 0];
+  function accel(x, z, out) {
+    var ax = 0, az = 0;
+    for (var i = 0; i < bodies.length; i++) {
+      var b = bodies[i], dx = b.x - x, dz = b.z - z;
+      var d2 = dx * dx + dz * dz + SOFT * SOFT;
+      var inv = mass(b) / (d2 * Math.sqrt(d2));
+      ax += dx * inv; az += dz * inv;
+    }
+    out[0] = ax; out[1] = az;
+  }
+  function makeProbe(speed, angDeg) {
+    var a = angDeg * Math.PI / 180;
+    var p = { x: LAUNCH.x, z: LAUNCH.z, vx: Math.cos(a) * speed, vz: Math.sin(a) * speed, ax: 0, az: 0 };
+    accel(p.x, p.z, tmp); p.ax = tmp[0]; p.az = tmp[1];
+    return p;
+  }
+  function step(p, dt) {
+    p.x += p.vx * dt + 0.5 * p.ax * dt * dt;
+    p.z += p.vz * dt + 0.5 * p.az * dt * dt;
+    accel(p.x, p.z, tmp);
+    p.vx += 0.5 * (p.ax + tmp[0]) * dt;
+    p.vz += 0.5 * (p.az + tmp[1]) * dt;
+    p.ax = tmp[0]; p.az = tmp[1];
+  }
+  // returns null, a body index (crash), or -1 (escaped)
+  function check(p) {
+    for (var i = 0; i < bodies.length; i++) {
+      if (Math.hypot(bodies[i].x - p.x, bodies[i].z - p.z) <= bodies[i].r) return i;
+    }
+    return Math.hypot(p.x, p.z) > ESCAPE ? -1 : null;
+  }
+  function nearestGap(p) {
+    var m = Infinity;
+    for (var i = 0; i < bodies.length; i++) {
+      m = Math.min(m, Math.hypot(bodies[i].x - p.x, bodies[i].z - p.z) - bodies[i].r);
+    }
+    return Math.max(0, m);
+  }
+
+  // ---------- scene ----------
+  var stage = document.getElementById('stage');
+  var canvas = document.getElementById('c');
+  var renderer = new THREE.WebGLRenderer({ canvas: canvas, antialias: true });
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+  renderer.setClearColor(0x070b14, 1);
+  var scene = new THREE.Scene();
+  var camera = new THREE.PerspectiveCamera(40, 1, 1, 1000);
+
+  scene.add(new THREE.AmbientLight(0xffffff, 0.55));
+  var sun = new THREE.DirectionalLight(0xffffff, 0.95);
+  sun.position.set(-30, 50, 40);
+  scene.add(sun);
+
+  var grid = new THREE.GridHelper(180, 36, 0x1d2a4a, 0x111a30);
+  grid.position.y = -0.02;
+  scene.add(grid);
+
+  var meshes = bodies.map(function (b) {
+    var m = new THREE.Mesh(
+      new THREE.SphereGeometry(1, 40, 28),
+      new THREE.MeshStandardMaterial({ color: b.color, roughness: 0.65, metalness: 0.05, emissive: b.color, emissiveIntensity: 0.12 })
+    );
+    m.position.set(b.x, 0, b.z);
+    m.scale.setScalar(b.r);
+    scene.add(m);
+    return m;
+  });
+
+  var probeMesh = new THREE.Mesh(
+    new THREE.SphereGeometry(0.75, 20, 14),
+    new THREE.MeshBasicMaterial({ color: 0xffffff })
+  );
+  scene.add(probeMesh);
+
+  var launchRing = new THREE.Mesh(
+    new THREE.RingGeometry(1.5, 1.8, 40),
+    new THREE.MeshBasicMaterial({ color: 0x8fe3ff, transparent: true, opacity: 0.6, side: THREE.DoubleSide })
+  );
+  launchRing.rotation.x = -Math.PI / 2;
+  launchRing.position.set(LAUNCH.x, 0, LAUNCH.z);
+  scene.add(launchRing);
+
+  var arrow = new THREE.ArrowHelper(new THREE.Vector3(1, 0, 0), new THREE.Vector3(LAUNCH.x, 0, LAUNCH.z), 10, 0x8fe3ff, 2.4, 1.4);
+  scene.add(arrow);
+
+  var MAXT = 6000;
+  var trailPos = new Float32Array(MAXT * 3), trailCount = 0;
+  var trailGeo = new THREE.BufferGeometry();
+  trailGeo.setAttribute('position', new THREE.BufferAttribute(trailPos, 3));
+  trailGeo.setDrawRange(0, 0);
+  var trail = new THREE.Line(trailGeo, new THREE.LineBasicMaterial({ color: 0x8fe3ff }));
+  trail.frustumCulled = false;
+  scene.add(trail);
+
+  var PV = 700;
+  var prevPos = new Float32Array(PV * 3);
+  var prevGeo = new THREE.BufferGeometry();
+  prevGeo.setAttribute('position', new THREE.BufferAttribute(prevPos, 3));
+  prevGeo.setDrawRange(0, 0);
+  var prevLine = new THREE.Line(prevGeo, new THREE.LineBasicMaterial({ color: 0xe6ebf5, transparent: true, opacity: 0.28 }));
+  prevLine.frustumCulled = false;
+  scene.add(prevLine);
+
+  function addTrail(x, z) {
+    if (trailCount === MAXT) { trailPos.copyWithin(0, 3); trailCount--; }
+    var i = trailCount * 3;
+    trailPos[i] = x; trailPos[i + 1] = 0; trailPos[i + 2] = z;
+    trailCount++;
+    trailGeo.setDrawRange(0, trailCount);
+    trailGeo.attributes.position.needsUpdate = true;
+  }
+  function clearTrail() { trailCount = 0; trailGeo.setDrawRange(0, 0); }
+
+  function resize() {
+    var w = stage.clientWidth, h = stage.clientHeight;
+    if (!w || !h) return;
+    renderer.setSize(w, h, false);
+    var aspect = w / h;
+    camera.aspect = aspect;
+    var t = Math.tan(camera.fov * Math.PI / 360);
+    var d = Math.max(62 / (t * aspect), 44 / t);
+    camera.position.set(0, d * 0.8, d * 0.6 + 2);
+    camera.lookAt(0, 0, 2);
+    camera.updateProjectionMatrix();
+  }
+  if (window.ResizeObserver) new ResizeObserver(resize).observe(stage);
+  window.addEventListener('resize', resize);
+
+  // ---------- controls ----------
+  var $ = function (id) { return document.getElementById(id); };
+  var speedEl = $('speed'), angleEl = $('angle'), rateEl = $('rate'), previewEl = $('preview');
+  var sizeEls = [$('rA'), $('rB'), $('rC')];
+  var massEls = [$('mA'), $('mB'), $('mC')];
+  var sizeVals = [$('rAVal'), $('rBVal'), $('rCVal')];
+  var statusEl = $('status');
+
+  var state = 'ready', probe = null, elapsed = 0, timeScale = 3, endedAt = null;
+
+  function setStatus(s, text) { state = s; statusEl.dataset.s = s; statusEl.textContent = text; }
+
+  function updateArrow() {
+    var sp = parseFloat(speedEl.value), a = parseFloat(angleEl.value) * Math.PI / 180;
+    arrow.setDirection(new THREE.Vector3(Math.cos(a), 0, Math.sin(a)));
+    arrow.setLength(4 + sp * 4, 2.4, 1.4);
+    arrow.visible = state !== 'flying';
+    launchRing.visible = arrow.visible;
+  }
+
+  function refreshPreview() {
+    if (!previewEl.checked || state === 'flying') { prevGeo.setDrawRange(0, 0); return; }
+    var p = makeProbe(parseFloat(speedEl.value), parseFloat(angleEl.value));
+    var n = 0, dt = 1 / 120;
+    for (var s = 0; s < 4800 && n < PV; s++) {
+      step(p, dt);
+      if (check(p) !== null) break;
+      if (s % 8 === 0) { prevPos[n * 3] = p.x; prevPos[n * 3 + 1] = 0.02; prevPos[n * 3 + 2] = p.z; n++; }
+    }
+    prevGeo.setDrawRange(0, n);
+    prevGeo.attributes.position.needsUpdate = true;
+  }
+
+  function readouts() {
+    if (!probe) {
+      $('rSpeed').textContent = parseFloat(speedEl.value).toFixed(2);
+      $('rNear').textContent = nearestGap({ x: LAUNCH.x, z: LAUNCH.z }).toFixed(1);
+    } else {
+      $('rSpeed').textContent = Math.hypot(probe.vx, probe.vz).toFixed(2);
+      $('rNear').textContent = nearestGap(probe).toFixed(1);
+    }
+    $('rTime').textContent = elapsed.toFixed(1);
+    $('clock').textContent = 't = ' + elapsed.toFixed(1);
+  }
+
+  function placeProbe() {
+    var x = probe ? probe.x : LAUNCH.x, z = probe ? probe.z : LAUNCH.z;
+    probeMesh.position.set(x, 0, z);
+  }
+
+  function doReset() {
+    probe = null; elapsed = 0; clearTrail();
+    setStatus('ready', 'Ready to launch');
+    updateArrow(); refreshPreview(); placeProbe(); readouts();
+  }
+
+  function doLaunch() {
+    clearTrail();
+    probe = makeProbe(parseFloat(speedEl.value), parseFloat(angleEl.value));
+    elapsed = 0;
+    addTrail(probe.x, probe.z);
+    setStatus('flying', 'In flight');
+    updateArrow(); refreshPreview(); placeProbe(); readouts();
+  }
+
+  function finish(code) {
+    if (code === -1) setStatus('escaped', 'Escaped');
+    else setStatus('crashed', 'Crashed into ' + bodies[code].name);
+    updateArrow(); refreshPreview();
+  }
+
+  function advance(simDt) {
+    var n = Math.max(1, Math.ceil(simDt / (1 / 240))), h = simDt / n;
+    for (var i = 0; i < n; i++) {
+      step(probe, h);
+      var c = check(probe);
+      if (c !== null) { addTrail(probe.x, probe.z); placeProbe(); finish(c); return; }
+      elapsed += h;
+    }
+    addTrail(probe.x, probe.z);
+    placeProbe();
+  }
+
+  speedEl.addEventListener('input', function () {
+    $('speedVal').textContent = parseFloat(speedEl.value).toFixed(2);
+    updateArrow(); refreshPreview(); if (state !== 'flying') readouts();
+  });
+  angleEl.addEventListener('input', function () {
+    $('angleVal').textContent = angleEl.value + '°';
+    updateArrow(); refreshPreview();
+  });
+  rateEl.addEventListener('input', function () {
+    timeScale = parseFloat(rateEl.value);
+    $('rateVal').textContent = timeScale.toFixed(1) + '×';
+  });
+  previewEl.addEventListener('change', refreshPreview);
+  sizeEls.forEach(function (el, i) {
+    el.addEventListener('input', function () {
+      var r = parseFloat(el.value);
+      bodies[i].r = r;
+      meshes[i].scale.setScalar(r);
+      sizeVals[i].textContent = r.toFixed(1);
+      massEls[i].textContent = 'mass ' + Math.round(mass(bodies[i]));
+      refreshPreview();
+    });
+  });
+  $('launch').addEventListener('click', doLaunch);
+  $('reset').addEventListener('click', doReset);
+
+  // ---------- loop ----------
+  var last = performance.now();
+  function frame(now) {
+    var dtReal = Math.min(0.05, (now - last) / 1000);
+    last = now;
+    if (state === 'flying' && probe) { advance(dtReal * timeScale); readouts(); }
+    renderer.render(scene, camera);
+    requestAnimationFrame(frame);
+  }
+
+  resize();
+  doReset();
+  requestAnimationFrame(frame);
+})();
+</script>
+
+</body></html>
